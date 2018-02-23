@@ -1,0 +1,6 @@
+[package]
+name = "sequencer"
+version = "0.1.0"
+authors = ["Xudong Huang <huangxu008@hotmail.com>"]
+
+[dependencies]
