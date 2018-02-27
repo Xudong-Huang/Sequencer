@@ -164,15 +164,15 @@ impl<T> Drop for SeqGuard<T> {
     /// other sequencer instances forever. Multiple `release` on the same sequencer
     /// instance take on effect.
     fn drop(&mut self) {
-        // remove self from the wait list
         let mut waiter_list = self.inner.waiter_list.lock().unwrap();
+        // update the cur_seq
+        self.inner.cur_seq.fetch_add(1, Ordering::Release);
+        // remove self from the wait list
         assert_eq!(waiter_list.pop_front().is_some(), true);
         waiter_list
             .front()
             .map(|w| w.take(Ordering::Acquire).map(|w| w.unpark()));
 
-        // update the cur_seq
-        self.inner.cur_seq.fetch_add(1, Ordering::Relaxed);
     }
 }
 
