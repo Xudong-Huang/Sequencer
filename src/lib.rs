@@ -159,7 +159,7 @@ impl<T> Drop for Sequencer<T> {
 
 impl<T> fmt::Debug for Sequencer<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
+        f.write!(
             f,
             "Sequencer {{ inner: {:?}, local_seq: {} }}",
             self.inner, self.local_seq
