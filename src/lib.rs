@@ -23,14 +23,6 @@ struct Inner<T> {
     data: UnsafeCell<T>,
 }
 
-// impl<T> Inner<T> {
-//     // get the internal data mut ref
-//     #[inline]
-//     fn get_data_mut(&mut self) -> &mut T {
-//         unsafe { &mut *self.data.get() }
-//     }
-// }
-
 /// `Seq` is a kind of sync primitive that the resource can be accessed only in
 /// a sequential order by `Sequencer` instances that created by its `next` method
 // #[derive(Debug)]
@@ -155,14 +147,6 @@ impl<T> Drop for SeqGuard<T> {
     /// drop the SeqGuard
     ///
     /// this will unblock the next Sequencer `lock`
-    /// release the current sequencer, unblock the next sequencer instance wait on it
-    ///
-    /// must be called in a ready state which is after `wait` or created via `new`
-    /// or it will panic
-    /// after call `release`, call `wait` on the same sequencer instance will panic.
-    /// You must call this method explicitly before drop, or it will block
-    /// other sequencer instances forever. Multiple `release` on the same sequencer
-    /// instance take on effect.
     fn drop(&mut self) {
         let mut waiter_list = self.inner.waiter_list.lock().unwrap();
         // update the cur_seq
