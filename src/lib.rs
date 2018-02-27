@@ -101,9 +101,25 @@ impl<T> Sequencer<T> {
     ///
     /// the `lock` would block until the previous sequencer instance get released.
     /// A Sequencer is released if its `lock` returned AND the returned `SeqGuard` got dropped
-    pub fn lock(self) -> SeqGuard<T> {
+    pub fn lock(mut self) -> SeqGuard<T> {
+        use std::mem;
+
+        self.wait();
+        let g = SeqGuard {
+            // drop inner manually
+            inner: mem::replace(&mut self.inner, unsafe { mem::uninitialized() }),
+        };
+        // drop waiter manually
+        let _ = mem::replace(&mut self.waiter, unsafe { mem::uninitialized() });
+        // don't need to run the drop for Sequencer
+        mem::forget(self);
+        g
+    }
+
+    #[inline]
+    fn wait(&self) {
         if self.local_seq == self.inner.cur_seq.load(Ordering::Acquire) {
-            return SeqGuard { inner: self.inner };
+            return;
         }
 
         // create a blocker that ignore the cancel signal
@@ -111,13 +127,23 @@ impl<T> Sequencer<T> {
         self.waiter.swap(waiter.clone(), Ordering::Release);
         // recheck
         if self.local_seq == self.inner.cur_seq.load(Ordering::Acquire) {
-            return SeqGuard { inner: self.inner };
+            return;
         }
 
         // wait until got triggered
         waiter.park(None).expect("sequencer lock internal error");
+    }
+}
 
-        SeqGuard { inner: self.inner }
+impl<T> Drop for Sequencer<T> {
+    /// drop the Sequencer
+    ///
+    /// this will unblock the next Sequencer `lock` if it's not consumed by `lock`
+    fn drop(&mut self) {
+        self.wait();
+        let _ = SeqGuard {
+            inner: self.inner.clone(),
+        };
     }
 }
 
@@ -156,7 +182,6 @@ impl<T> Drop for SeqGuard<T> {
         waiter_list
             .front()
             .map(|w| w.take(Ordering::Acquire).map(|w| w.unpark()));
-
     }
 }
 
@@ -168,14 +193,16 @@ mod tests {
         let seq = Seq::new(0);
         let s1 = seq.next();
         let s2 = seq.next();
+        let s3 = seq.next();
         {
             let g1 = s1.lock();
             assert_eq!(*g1, 0);
         }
+        drop(s2);
         {
             // g1 must dropped first
-            let g2 = s2.lock();
-            assert_eq!(*g2, 0);
+            let g3 = s3.lock();
+            assert_eq!(*g3, 0);
         }
     }
 
