@@ -1,6 +1,7 @@
 #[cfg_attr(test, macro_use)]
 extern crate may;
 
+use std::fmt;
 use std::sync::Arc;
 use std::ops::{Deref, DerefMut};
 use std::collections::LinkedList;
@@ -11,7 +12,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use may::sync::{AtomicOption, Blocker, Mutex};
 
 // save global seq info
-// #[derive(Debug)]
 struct Inner<T> {
     // current sequence number used by all Sequencer instances
     cur_seq: AtomicUsize,
@@ -23,9 +23,20 @@ struct Inner<T> {
     data: UnsafeCell<T>,
 }
 
+impl<T> fmt::Debug for Inner<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "SeqInner {{ cur_seq: {}, global_seq: {} }}",
+            self.cur_seq.load(Ordering::Acquire),
+            self.global_seq.get()
+        )
+    }
+}
+
 /// `Seq` is a kind of sync primitive that the resource can be accessed only in
 /// a sequential order by `Sequencer` instances that created by its `next` method
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct Seq<T> {
     inner: Arc<Inner<T>>,
 }
@@ -85,7 +96,6 @@ impl<T> Seq<T> {
 /// `Sequencer` can be used to access the resource by calling 'lock' method.
 /// The `lock` will return only if its previous `Sequencer` instance get "released".
 /// A Sequencer is released if `lock` returned AND the returned `SeqGuard` got dropped
-// #[derive(Debug)]
 pub struct Sequencer<T> {
     inner: Arc<Inner<T>>,
     waiter: Arc<AtomicOption<Arc<Blocker>>>,
@@ -147,9 +157,19 @@ impl<T> Drop for Sequencer<T> {
     }
 }
 
+impl<T> fmt::Debug for Sequencer<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Sequencer {{ inner: {:?}, local_seq: {} }}",
+            self.inner, self.local_seq
+        )
+    }
+}
+
 /// `SeqGuard` is something like `MutexGuard` that can be `deref` to the data
 /// and the `drop` method would unblock the next `Sequencer` instance.
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct SeqGuard<T> {
     inner: Arc<Inner<T>>,
 }
@@ -191,11 +211,14 @@ mod tests {
     #[test]
     fn sanity() {
         let seq = Seq::new(0);
+        println!("seq = {:?}", seq);
         let s1 = seq.next();
+        println!("s1 = {:?}", s1);
         let s2 = seq.next();
         let s3 = seq.next();
         {
             let g1 = s1.lock();
+            println!("g1 = {:?}", g1);
             assert_eq!(*g1, 0);
         }
         drop(s2);
